@@ -358,7 +358,12 @@ function leadersMessage() {
   if (gaps.length || noImpact) {
     b += rule('판단 근거의 공백');
     if (gaps.length) b += `<div ${line}>${gaps.join(' · ')} 컬럼이 비어 있어 지연 여부와 정체 사유를 표시할 수 없습니다.</div>`;
-    if (noImpact) b += `<div ${line}>Biz Impact 미입력 <b>${noImpact}/${data.rows.length}건</b> — 우선순위 근거가 절반입니다.</div>`;
+    // "절반" was written when it was 44 of 98 and stayed true for exactly one week.
+    if (noImpact) {
+      const share = Math.round((noImpact / data.rows.length) * 100);
+      b += `<div ${line}>Biz Impact 미입력 <b>${noImpact}/${data.rows.length}건</b> (${share}%) — ` +
+        `그만큼은 우선순위를 판단할 근거가 없습니다.</div>`;
+    }
   }
 
   b += foot(`매주 자동 생성 · 정체 기준 ${STALE_DAYS}일 · 라인 구분은 시트 Category 기준`);
