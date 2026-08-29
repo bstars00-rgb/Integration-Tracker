@@ -44,7 +44,13 @@ if (!fs.existsSync(dataPath)) {
 }
 const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
-const stamp = process.argv[2] || new Date().toISOString().slice(0, 10);
+const argv = process.argv.slice(2);
+const stamp = argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) || new Date().toISOString().slice(0, 10);
+/**
+ * Marks the message as a correction. Posting a second, near-identical message into the
+ * same channel on the same day reads as a duplicate unless it says why it is there.
+ */
+const correction = argv.includes('--correction');
 const shortDate = (iso) => {
   const [y, m, d] = iso.split('-');
   return `${Number(m)}/${Number(d)}`;
@@ -83,7 +89,13 @@ const byPic = (rows) => {
 };
 
 /* ------------------------------------------------------------------ shared bits */
-const wrap = (body) => `<div style="${FONT};font-size:14px;color:#242424">${body}</div>`;
+const wrap = (body) =>
+  `<div style="${FONT};font-size:14px;color:#242424">${correction ? CORRECTION_NOTE : ''}${body}</div>`;
+
+const CORRECTION_NOTE =
+  `<div style="${FONT};font-size:13px;color:#c0392b;font-weight:600;` +
+  `border-left:3px solid #c0392b;padding:2px 0 2px 10px;margin:0 0 12px 0">` +
+  `정정 — 앞서 보낸 메시지는 일주일 전 데이터로 작성됐습니다. 아래가 최신 기준입니다.</div>`;
 const title = (text) =>
   `<div style="${FONT};font-size:15px;font-weight:700;margin:0 0 2px 0">${text}</div>` +
   `<div style="${FONT};font-size:12px;margin:0 0 12px 0"><a href="${BOARD_URL}">${BOARD_URL}</a></div>`;
