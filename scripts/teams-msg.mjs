@@ -15,6 +15,11 @@
  * are a pipeline question, not a weekly one - including either buried the ten or so
  * rows that actually moved.
  *
+ * A go-live is announced exactly once, the week it happens, and then never again.
+ * data/live-announced.json remembers which partners have already been named, so a
+ * partner serving bookings at 80% while launch monitoring runs stops reappearing in the
+ * developer list week after week. Delete an entry there to have it announced again.
+ *
  * Posting is a separate step, so this can be read before anything is sent:
  *   node scripts/post-teams.js msg "<chat>" <html>          (dry run)
  *   node scripts/post-teams.js msg "<chat>" <html> --send   (send)
@@ -56,9 +61,52 @@ const shortDate = (iso) => {
   return `${Number(m)}/${Number(d)}`;
 };
 
+/* ------------------------------------------------------------------ live, once */
+/**
+ * A partner that has gone live is news exactly once.
+ *
+ * "Live" is the sheet's Status, not the 100% milestone: Klook and bizplay both serve
+ * bookings at 80% while launch monitoring runs, and until now they came back in the
+ * developer list every week at the same percentage. Announced once, then out of the
+ * recurring sections for good.
+ *
+ * The ledger is committed alongside the data, so the answer does not depend on which
+ * machine ran the weekly.
+ */
+const LEDGER = path.join(root, 'data', 'live-announced.json');
+
+const isLive = (r) => r.status === 'Live' || r.progress >= 100;
+
+function readLedger() {
+  if (!fs.existsSync(LEDGER)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(LEDGER, 'utf8'));
+  } catch {
+    console.warn('  live-announced.json unreadable; treating every live partner as new.');
+    return {};
+  }
+}
+
+const ledger = readLedger();
+const liveRows = data.rows.filter(isLive);
+const newlyLive = liveRows.filter((r) => !ledger[r.project]);
+
+/** Written only when the messages are actually produced, never on a dry inspection. */
+function recordAnnounced() {
+  if (!newlyLive.length) return;
+  for (const r of newlyLive) ledger[r.project] = stamp;
+  const sorted = Object.fromEntries(Object.entries(ledger).sort(([a], [b]) => a.localeCompare(b)));
+  fs.writeFileSync(LEDGER, `${JSON.stringify(sorted, null, 1)}\n`, 'utf8');
+}
+
+/**
+ * The weekly working set. A live partner drops out even at 80%, because the team asked
+ * not to see it again after the go-live is announced.
+ */
+const inFlight = data.rows.filter((r) => r.progress > 0 && r.progress < 100 && !isLive(r));
+
 // route and watch are computed in build.mjs and shipped on the row, so these messages
 // and the board cannot disagree about who owns what.
-const inFlight = data.rows.filter((r) => r.progress > 0 && r.progress < 100);
 const stalled = inFlight
   .filter((r) => r.days !== null && r.days >= STALE_DAYS)
   .sort((a, b) => b.days - a.days);
@@ -136,6 +184,13 @@ function devMessage() {
     b += '</div>';
   }
 
+  if (newlyLive.length) {
+    b += rule('Live this week');
+    b += `<div ${line}>${newlyLive
+      .map((r) => `<b>${esc(r.project)}</b> ${dim(`${r.progress}%`)}`)
+      .join(' · ')} &mdash; announced once, and out of this list from next week.</div>`;
+  }
+
   if (partnerWait.length) {
     const fresh = partnerWait.filter((r) => r.days !== null && r.days < 30).length;
     b += rule('Waiting on partners');
@@ -167,6 +222,12 @@ function salesMessage() {
   if (!stalled.length) {
     b += `<div ${line}>진행중 ${inFlight.length}건 모두 최근 ${STALE_DAYS}일 안에 움직였습니다.</div>`;
     return wrap(b);
+  }
+
+  if (newlyLive.length) {
+    b += `<div ${line}>&#127881; 이번 주 라이브 — ${newlyLive
+      .map((r) => `<b>${esc(r.project)}</b>`)
+      .join(' · ')}</div>`;
   }
 
   b += `<div ${line}>진행중 <b>${inFlight.length}건</b> 중 <b>${STALE_DAYS}일</b> 넘게 멈춘 건이 ` +
@@ -229,8 +290,11 @@ function lineStats() {
   return [...LINES, ...extra]
     .map((l) => {
       const rows = data.rows.filter((r) => r.category === l.key);
-      const live = rows.filter((r) => r.progress >= 100);
-      const inf = rows.filter((r) => r.progress > 0 && r.progress < 100);
+      // Same live rule as everywhere else: the sheet's Status, not the 100% milestone.
+      // Counting by milestone here left Klook and bizplay in the in-flight column while
+      // the header above had already retired them.
+      const live = rows.filter(isLive);
+      const inf = rows.filter((r) => r.progress > 0 && r.progress < 100 && !isLive(r));
       return {
         ...l,
         rows,
@@ -263,12 +327,18 @@ function twoWay() {
 
 function leadersMessage() {
   const lines = lineStats();
-  const totalLive = data.rows.filter((r) => r.progress >= 100).length;
+  const totalLive = liveRows.length;
   const idle = data.rows.filter((r) => r.progress === 0).length;
 
   let b = title(`&#128225; Integration Tracker &mdash; 라인별 현황 (${shortDate(stamp)})`);
   b += `<div ${line}>전체 <b>${data.rows.length}건</b> · 라이브 <b>${totalLive}</b> · ` +
     `진행중 <b>${inFlight.length}</b> (${STALE_DAYS}일+ 정체 ${red(`${stalled.length}`)}) · 미착수 <b>${idle}</b></div>`;
+
+  if (newlyLive.length) {
+    b += `<div ${line}>&#127881; 이번 주 라이브 — ${newlyLive
+      .map((r) => `<b>${esc(r.project)}</b> ${dim(esc(r.category))}`)
+      .join(' · ')}</div>`;
+  }
 
   /* ---- the five lines, side by side ---- */
   const th = `style="${FONT};font-size:12px;color:#666;font-weight:600;text-align:right;padding:4px 8px;border-bottom:1px solid #ddd"`;
@@ -383,7 +453,8 @@ function leadersMessage() {
     }
   }
 
-  b += foot(`매주 자동 생성 · 정체 기준 ${STALE_DAYS}일 · 라인 구분은 시트 Category 기준`);
+  b += foot(`매주 자동 생성 · 정체 기준 ${STALE_DAYS}일 · 라인 구분은 시트 Category 기준 · ` +
+    `라이브 전환은 최초 1회만 표기`);
   return wrap(b);
 }
 
@@ -404,5 +475,12 @@ console.log(`\n  In-flight ${inFlight.length}  ·  stalled ${STALE_DAYS}d+ ${sta
 for (const f of files) {
   console.log(`  ${CH[f.kind].padEnd(22)} ${path.relative(root, f.file)}  (${f.size} chars)`);
 }
+  // Recorded only after the files exist, so a failed run does not silently mark a
+  // go-live as already announced and swallow it.
+  recordAnnounced();
+  if (newlyLive.length) {
+    console.log(`  live announced (once only): ${newlyLive.map((r) => r.project).join(', ')}`);
+  }
+
 console.log('\n  Nothing sent. To post one:');
 console.log(`    node scripts/post-teams.js msg "${CH.dev}" "<file>" --send\n`);
