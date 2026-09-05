@@ -143,11 +143,16 @@ function devMessage() {
       `${fresh} moved in the last month. Nothing for us until they come back.</div>`;
   }
 
-  const worst = devWork.find((r) => r.days !== null && r.days >= STALE_DAYS);
+  // devWork is ordered by who owes the work, not by progress, so taking the first
+  // stalled row called Gotadi at 40% "the most advanced integration still open" while
+  // Klook sat at 80% two lines above it. Pick the one the sentence is actually about.
+  const worst = devWork
+    .filter((r) => r.days !== null && r.days >= STALE_DAYS)
+    .sort((a, b2) => b2.progress - a.progress || b2.days - a.days)[0];
   if (worst) {
     b += rule('Worth a look');
-    b += `<div ${line}><b>${esc(worst.project)}</b> is the most advanced integration still open ` +
-      `at ${worst.progress}%, and has not moved in ${worst.days} days.</div>`;
+    b += `<div ${line}><b>${esc(worst.project)}</b> is the furthest along of the ones that have ` +
+      `stopped — ${worst.progress}%, untouched for ${worst.days} days.</div>`;
   }
 
   b += foot(`In-flight only (${inFlight.length}). Live and not-started are excluded. Stalled = no milestone for ${STALE_DAYS}+ days.`);
