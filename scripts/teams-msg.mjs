@@ -50,7 +50,17 @@ if (!fs.existsSync(dataPath)) {
 const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
 const argv = process.argv.slice(2);
+/**
+ * Two dates, on purpose.
+ *
+ * stamp names the output files, and the weekly pipeline passes the report week here so
+ * it can find them afterwards. asOf is what the message says, and it is the moment the
+ * tracker data was actually built. They differ: the weekly for 5-11 September runs on
+ * the 13th, and a message headed "9/5" carrying days-since figures counted to the 13th
+ * had the reader doing arithmetic to work out which day was true.
+ */
 const stamp = argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) || new Date().toISOString().slice(0, 10);
+const asOf = (data.generatedAt || new Date().toISOString()).slice(0, 10);
 /**
  * Marks the message as a correction. Posting a second, near-identical message into the
  * same channel on the same day reads as a duplicate unless it says why it is there.
@@ -94,7 +104,7 @@ const newlyLive = liveRows.filter((r) => !ledger[r.project]);
 /** Written only when the messages are actually produced, never on a dry inspection. */
 function recordAnnounced() {
   if (!newlyLive.length) return;
-  for (const r of newlyLive) ledger[r.project] = stamp;
+  for (const r of newlyLive) ledger[r.project] = asOf;
   const sorted = Object.fromEntries(Object.entries(ledger).sort(([a], [b]) => a.localeCompare(b)));
   fs.writeFileSync(LEDGER, `${JSON.stringify(sorted, null, 1)}\n`, 'utf8');
 }
@@ -165,7 +175,7 @@ function devMessage() {
   };
   const MARK = { omhbuild: '&#128308;', omhsupport: '&#128992;', switchreview: '&#128993;' };
 
-  let b = title(`&#128225; Integration Tracker &mdash; ${shortDate(stamp)}`);
+  let b = title(`&#128225; Integration Tracker &mdash; ${shortDate(asOf)}`);
 
   if (!devWork.length) {
     b += `<div ${line}>Nothing is waiting on OMH engineering this week.</div>`;
@@ -217,7 +227,7 @@ function devMessage() {
 /* ------------------------------------------------------------------ 2. sales team */
 // An alert, so it is grouped by the person who can act on it rather than by stage.
 function salesMessage() {
-  let b = title(`&#128680; Integration Tracker &mdash; 정체 알럿 (${shortDate(stamp)})`);
+  let b = title(`&#128680; Integration Tracker &mdash; 정체 알럿 (${shortDate(asOf)})`);
 
   if (!stalled.length) {
     b += `<div ${line}>진행중 ${inFlight.length}건 모두 최근 ${STALE_DAYS}일 안에 움직였습니다.</div>`;
@@ -330,7 +340,7 @@ function leadersMessage() {
   const totalLive = liveRows.length;
   const idle = data.rows.filter((r) => r.progress === 0).length;
 
-  let b = title(`&#128225; Integration Tracker &mdash; 라인별 현황 (${shortDate(stamp)})`);
+  let b = title(`&#128225; Integration Tracker &mdash; 라인별 현황 (${shortDate(asOf)})`);
   b += `<div ${line}>전체 <b>${data.rows.length}건</b> · 라이브 <b>${totalLive}</b> · ` +
     `진행중 <b>${inFlight.length}</b> (${STALE_DAYS}일+ 정체 ${red(`${stalled.length}`)}) · 미착수 <b>${idle}</b></div>`;
 
