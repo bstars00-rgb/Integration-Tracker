@@ -85,7 +85,16 @@ const shortDate = (iso) => {
  */
 const LEDGER = path.join(root, 'data', 'live-announced.json');
 
-const isLive = (r) => r.status === 'Live' || r.progress >= 100;
+/**
+ * Live, or already announced as live.
+ *
+ * The ledger is part of the test on purpose. The 5 Oct sheet split the go-live in two -
+ * "Pending Live" at 80% once our key is open, "Live" at 100% once the customer confirms
+ * - which pushed Klook and Momo back into the working set after both had already been
+ * announced. The rule was that an announced partner does not come back, so the record of
+ * having announced it outranks a later relabelling of the status column.
+ */
+const isLive = (r) => r.status === 'Live' || r.progress >= 100 || Boolean(ledger[r.project]);
 
 function readLedger() {
   if (!fs.existsSync(LEDGER)) return {};
@@ -185,7 +194,9 @@ function devMessage() {
     }:</div>`;
     b += '<div style="margin:8px 0 0 0">';
     for (const r of devWork) {
-      const age = r.days === null ? 'no record' : `${r.days}d`;
+      // A milestone dated ahead of today is a plan typed early. Printing it as "-5d"
+      // read as the freshest row on the list when nothing had happened at all.
+      const age = r.days === null ? 'no record' : r.days < 0 ? `in ${-r.days}d` : `${r.days}d`;
       const flag = r.days !== null && r.days >= STALE_DAYS ? ` ${red('&#9888;')}` : '';
       b += `<div ${line}>${MARK[r.watch]} <b>${esc(r.project)}</b> &nbsp;${r.progress}% &nbsp;${dim(
         esc(stageOf(r)),

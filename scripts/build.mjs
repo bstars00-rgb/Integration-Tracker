@@ -35,6 +35,25 @@ const SHEET_CANDIDATES = ['Dev Tracker (IT)', 'Dev Tracker'];
  * so whichever version lands in the CRM folder on a given week still builds.
  */
 const STAGE_SETS = {
+  // The 5 Oct restructure. Three early stages were added ahead of NDA Signed, so every
+  // numeral shifted by three, and the go-live split in two: 80% is our key being open,
+  // 100% is the client confirming they are live.
+  fourteen: [
+    { n: 1, column: '① Pipeline Start (5%)', label: 'Pipeline Start', short: 'Start', weight: 5 },
+    { n: 2, column: '② Proposal / Intro Sent (10%)', label: 'Proposal / Intro Sent', short: 'Intro', weight: 10 },
+    { n: 3, column: '③ NDA Sent (15%)', label: 'NDA Sent', short: 'NDA sent', weight: 15 },
+    { n: 4, column: '④ NDA Signed (20%)', label: 'NDA Signed', short: 'NDA', weight: 20 },
+    { n: 5, column: '⑤ Contract Signed (30%)', label: 'Contract Signed', short: 'Contract', weight: 30 },
+    { n: 6, column: '⑥ SLA Finalized (40%)', label: 'SLA Finalized', short: 'SLA', weight: 40 },
+    { n: 7, column: '⑦ Dev Kickoff Planned (45%)', label: 'Dev Kickoff Planned', short: 'Kickoff', weight: 45 },
+    { n: 8, column: '⑧ Dev Kickoff / SPEC·DEV Key (50%) / Credential', label: 'Dev Kickoff / SPEC / DEV Key', short: 'Dev', weight: 50 },
+    { n: 9, column: '⑨ Certification (60%)', label: 'Certification', short: 'Cert', weight: 60 },
+    { n: 10, column: '⑩ Live Test (70%)', label: 'Live Test', short: 'Test', weight: 70 },
+    { n: 11, column: '⑪ Dev Completion Planned (75%)', label: 'Dev Completion Planned', short: 'Complete', weight: 75 },
+    { n: 12, column: '⑫ Live Key Open – OMH side only (80%)', label: 'Live Key Open', short: 'Key', weight: 80 },
+    { n: 13, column: '⑬ First Booking (90%)', label: 'First Booking', short: 'Booking', weight: 90 },
+    { n: 14, column: '⑭ Customer Live Confirmed – client notified (100%)', label: 'Customer Live Confirmed', short: 'Live', weight: 100 },
+  ],
   twelve: [
     { n: 1, column: '① 미팅/1st Contact (10%)', label: '1st Contact', short: 'Contact', weight: 10 },
     { n: 2, column: '② NDA 체결 (20%)', label: 'NDA Signed', short: 'NDA', weight: 20 },
@@ -95,8 +114,15 @@ const COLUMNS = {
   nextGate: ['다음 게이트', 'Next Gate'],
   lastActivity: ['최근 활동일', 'Last Activity'],
   delay: ['지연 체크', 'Delay Check'],
+  // Added 5 Oct: how long a partner has sat where it is, and the follow-up log.
+  pipelineAge: ['Pipeline Age'],
+  chaseCount: ['Chase #'],
+  lastChase: ['Last Chase'],
+  daysSinceChase: ['Days Since Chase'],
+  nextChaseDue: ['Next Chase Due'],
+  chaseAlert: ['Chase Alert'],
   itOwner: ['IT 담당자', 'IT Owner', 'Dev PIC'],
-  blocker: ['현재 블로커 / 이슈', 'Blocker', 'Blocker / Issue', 'Current Blocker'],
+  blocker: ['현재 블로커 / 이슈', 'Blocker', 'Blocker / Issue', 'Current Blocker', 'Waiting On'],
   note: ['비고', 'Note', 'Remarks'],
   consistency: ['Status vs 날짜 정합성', 'Status vs Date Consistency'],
 };
@@ -250,16 +276,30 @@ const IDX = Object.fromEntries(
  * numeral and the weight in brackets stay put. Matching on the stable parts means a
  * reworded column keeps reporting instead of silently going blank.
  */
-const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫';
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭';
+
+/** The percentage a header declares, e.g. "⑨ Certification (60%)" -> 60. */
+const weightOf = (header) => {
+  const m = /\((\d+)%\)/.exec(String(header ?? ''));
+  return m ? Number(m[1]) : null;
+};
+
 function findStage(stage) {
   const exact = columnOf(stage.column);
   if (exact >= 0) return exact;
 
+  // The numeral alone is not enough. When the sheet grew three early stages, every
+  // numeral shifted by three: the twelve-stage set's ⑫ (100%) landed on the new
+  // "⑫ Live Key Open - OMH side only (80%)", so anything at 80% would have been read as
+  // finished and announced as a go-live. A numeral only counts when the weight agrees.
   const numeral = CIRCLED[stage.n - 1];
-  const byNumeral = headers.findIndex((h) => h.startsWith(numeral));
+  const byNumeral = headers.findIndex((h) => h.startsWith(numeral) && weightOf(h) === stage.weight);
   if (byNumeral >= 0) return byNumeral;
 
-  return headers.findIndex((h) => h.includes(`(${stage.weight}%)`));
+  // Falling back to the weight alone is safe: it is the thing the progress formula
+  // actually multiplies by, so a column claiming 60% is the 60% column whatever it is
+  // numbered or called.
+  return headers.findIndex((h) => weightOf(h) === stage.weight);
 }
 
 /** The sheet's own wording wins, so a rename shows up on the board rather than breaking it. */
@@ -277,9 +317,9 @@ function labelFrom(header, fallback) {
 // in either layout, so using it here would let the twelve-stage set claim an
 // eleven-stage sheet. Fuzzy matching resolves columns only after the layout is settled.
 const matches = (set) => set.filter((stage) => columnOf(stage.column) >= 0).length;
-const [setName, STAGES] = matches(STAGE_SETS.twelve) >= matches(STAGE_SETS.eleven)
-  ? ['twelve', STAGE_SETS.twelve]
-  : ['eleven', STAGE_SETS.eleven];
+const [setName, STAGES] = Object.entries(STAGE_SETS)
+  .map(([name, set]) => [name, set, matches(set)])
+  .sort((a, b) => b[2] - a[2] || b[1].length - a[1].length)[0];
 
 if (IDX.project < 0) {
   console.error(`\nNo "Project" column on row ${HEADER_ROW} of "${SHEET}". Has the layout changed?`);
@@ -408,6 +448,12 @@ for (let r = HEADER_ROW; r < grid.length; r += 1) {
     consistency,
     consistent,
     blocker: clean(at(raw, 'blocker')),
+    pipelineAge: at(raw, 'pipelineAge') ?? null,
+    chaseCount: at(raw, 'chaseCount') ?? null,
+    lastChase: toISODate(at(raw, 'lastChase')),
+    daysSinceChase: at(raw, 'daysSinceChase') ?? null,
+    nextChaseDue: toISODate(at(raw, 'nextChaseDue')),
+    chaseAlert: clean(at(raw, 'chaseAlert')),
     note: clean(at(raw, 'note')),
     progress,
     // The sheet authors both of these; the board shows them rather than second-guessing.
@@ -447,6 +493,8 @@ const payload = {
     futureDated: rows.filter((r) => r.days !== null && r.days < 0).length,
     hasTarget: IDX.targetGoLive >= 0,
     hasBlocker: IDX.blocker >= 0,
+    hasChase: IDX.chaseCount >= 0,
+    withChase: rows.filter((r) => r.chaseCount).length,
     hasParkedFlag: IDX.parkedFlag >= 0,
     hasDevOwner: IDX.devOwner >= 0,
     // How much of the funnel each partner type actually records. Comparing a Channel
