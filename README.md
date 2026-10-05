@@ -297,6 +297,19 @@ node scripts/post-teams.js msg "Global Sales Team" "<파일>" --send   # 실제 
 
 주간보고 파이프라인에서는 `run-weekly.js` Step 6.6 이 생성과 발송을 함께 합니다.
 
+## 1회성 공지
+
+```bash
+npm run announce           # 보낼 것 목록만 출력
+npm run announce -- --send # 실제 발송
+```
+
+`announcements/` 에 `<채널>--<슬러그>.html` 로 넣어두면 다음 주간보고 때
+트래커 메시지 바로 뒤에 한 번 나갑니다. 채널 키는 `dev` · `sales` · `leaders`.
+
+보낸 파일은 `announcements/sent.json` 에 기록되므로 재실행하거나 작업 트리를
+되돌려도 같은 공지가 두 번 나가지 않습니다. 라이브 전환 원장과 같은 장치입니다.
+
 ## 파일 구성
 
 ```
