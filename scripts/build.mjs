@@ -90,40 +90,48 @@ const STAGE_SETS = {
  */
 const COLUMNS = {
   no: ['No.'],
-  category: ['Category'],
-  project: ['Project'],
-  country: ['Country'],
+  category: ['__category', 'Category', '원본 카테고리 Category (orig.)'],
+  project: ['프로젝트 (업체) Project (Partner)', 'Project'],
+  country: ['국가 Country', 'Country'],
+  region: ['지역 Region'],
   direction: ['연동 방향 (API Direction)', 'API Direction', '연동 방향'],
-  impact: ['Biz Impact'],
-  devOwner: ['개발 주체 (Dev Owner)', 'Dev Owner', '개발 주체'],
-  switching: ['Switching'],
-  team: ['담당팀', 'Handling Team'],
-  pic: ['PIC (Sales)'],
-  status: ['Status'],
+  impact: ['비즈 임팩트 Biz Impact', 'Biz Impact'],
+  devOwner: ['개발 주체 Dev Owner', '개발 주체 (Dev Owner)', 'Dev Owner', '개발 주체'],
+  switching: ['연결 경로 Connection', 'Switching'],
+  team: ['처리 팀 Handling Team', '담당팀', 'Handling Team'],
+  pic: ['담당 (현재) Owner (current)', 'PIC (Sales)'],
+  status: ['상태 Status', 'Status'],
+  statusOverride: ['상태 수동 지정 Status override'],
+  salesStage: ['영업 단계 (CRM) Sales stage (CRM)'],
+  direction2: ['방향 Direction'],
+  nextActionKr: ['현황 · 다음 액션 (KR) Status · next action (KR)'],
+  nextActionEn: ['현황 · 다음 액션 (EN) Status · next action (EN)'],
+  lastContact: ['최종 연락 (CRM) Last contact (CRM)'],
+  source: ['출처 · 메모 Source · memo'],
   plannedStart: ['계획 시작', 'Planned Start'],
   plannedEnd: ['계획 종료', 'Planned End'],
   // The date people ask about most: when is this partner meant to be live? Not in the
   // sheet yet. Named here so it renders the day someone adds the column.
-  targetGoLive: ['Target Go-Live', '목표 오픈일', 'Planned Go-Live', 'Target Live Date', '목표 라이브'],
+  targetGoLive: ['목표 라이브 Target Go-Live', 'Target Go-Live', '목표 오픈일', 'Planned Go-Live', 'Target Live Date', '목표 라이브'],
   // Status is a formula on this sheet - it is looked up from Progress %, which is itself
   // derived from the milestone dates. Typing "On Hold" into it would overwrite the
   // formula, so a parked partner is declared in a column of its own instead.
-  parkedFlag: ['Hold/Drop', 'Hold / Drop', '보류/드롭', 'Pipeline', 'Pipeline Status'],
-  progress: ['진행율', 'Progress %'],
-  currentStage: ['현재 단계', 'Current Stage'],
+  parkedFlag: ['보류/드롭 Hold/Drop', 'Hold/Drop', 'Hold / Drop', '보류/드롭', 'Pipeline', 'Pipeline Status'],
+  progress: ['진행률 Progress %', '진행율', 'Progress %'],
+  currentStage: ['현재 단계 Current Stage', '현재 단계', 'Current Stage'],
   nextGate: ['다음 게이트', 'Next Gate'],
-  lastActivity: ['최근 활동일', 'Last Activity'],
-  delay: ['지연 체크', 'Delay Check'],
+  lastActivity: ['마지막 활동 Last Activity', '최근 활동일', 'Last Activity'],
+  delay: ['지연 체크 Delay Check', '지연 체크', 'Delay Check'],
   // Added 5 Oct: how long a partner has sat where it is, and the follow-up log.
-  pipelineAge: ['Pipeline Age'],
-  chaseCount: ['Chase #'],
-  lastChase: ['Last Chase'],
-  daysSinceChase: ['Days Since Chase'],
-  nextChaseDue: ['Next Chase Due'],
-  chaseAlert: ['Chase Alert'],
+  pipelineAge: ['파이프라인 기간 Pipeline Age', 'Pipeline Age'],
+  chaseCount: ['체이스 # Chase #', 'Chase #'],
+  lastChase: ['마지막 체이스 Last Chase', 'Last Chase'],
+  daysSinceChase: ['체이스 후 경과일 Days Since Chase', 'Days Since Chase'],
+  nextChaseDue: ['다음 체이스 Next Chase Due', 'Next Chase Due'],
+  chaseAlert: ['체이스 알림 Chase Alert', 'Chase Alert'],
   itOwner: ['IT 담당자', 'IT Owner', 'Dev PIC'],
-  blocker: ['현재 블로커 / 이슈', 'Blocker', 'Blocker / Issue', 'Current Blocker', 'Waiting On'],
-  note: ['비고', 'Note', 'Remarks'],
+  blocker: ['대기 사유 Waiting On', '현재 블로커 / 이슈', 'Blocker', 'Blocker / Issue', 'Current Blocker', 'Waiting On'],
+  note: ['원본 Note \(IT\) Note \(IT original\)', '비고', 'Note', 'Remarks'],
   consistency: ['Status vs 날짜 정합성', 'Status vs Date Consistency'],
 };
 
@@ -181,9 +189,27 @@ function stageLabelOf(value) {
  * shows up inside Dev Owner instead ("OHMY/ TGX", "Shiji or OHMY"). Prefer the column.
  */
 const SWITCH_PLATFORMS = ['TGX', 'Shiji', 'SHIJI', 'Travelgate', 'Derbysoft', 'Juniper'];
+/**
+ * v3's Connection column answers "how is this connected", so most rows say
+ * "직접 · Direct" or "미정 · TBD". Those are not platforms, and treating any non-empty
+ * value as one would have routed 81 direct integrations through a switch. Only a value
+ * that names a platform counts.
+ */
+// No \b after the Korean words: \b is defined on [A-Za-z0-9_], so there is no boundary
+// between 접 and a space and the test never fired - every row came back as switching.
+const NOT_A_PLATFORM = /^\s*(직접|미정|스위치 자체|direct|tbd|switch itself|n\/a|-)\s*(·|\(|$)/i;
+
 function parseSwitching(column, devOwner) {
   const explicit = clean(column);
-  if (explicit) return explicit;
+  if (explicit) {
+    // Checked before looking for a platform name, because "미정 (TAN vs Shiji·TGX)"
+    // mentions two platforms while saying the choice has not been made.
+    if (NOT_A_PLATFORM.test(explicit)) return null;
+    // "Shiji (TGX에서 전환) · Shiji (moved from TGX)" - keep the platform, drop the story.
+    const named = SWITCH_PLATFORMS.find((p) => new RegExp(p, 'i').test(explicit));
+    if (named) return named.toLowerCase() === 'shiji' ? 'SHIJI' : named;
+    return explicit;
+  }
   if (!devOwner) return null;
   const hit = SWITCH_PLATFORMS.find((p) => new RegExp(p, 'i').test(devOwner));
   return hit ? (hit.toLowerCase() === 'shiji' ? 'SHIJI' : hit) : null;
@@ -250,16 +276,102 @@ if (!fs.existsSync(SOURCE)) {
 }
 
 const workbook = XLSX.readFile(SOURCE, { cellDates: true });
-const SHEET = SHEET_CANDIDATES.find((name) => workbook.SheetNames.includes(name));
-if (!SHEET) {
-  console.error(`\nNo tracker sheet found. Looked for: ${SHEET_CANDIDATES.join(', ')}`);
+
+/**
+ * v3 keeps one sheet per category instead of a Category column on a single sheet.
+ * The sheet is the category, so the label comes from this map rather than from a cell.
+ */
+const CATEGORY_SHEETS = [
+  ['스위칭 업체 Switch vendors', 'Switch vendors'],
+  ['스위칭 연동 Switching', 'Switching'],
+  ['서드파티 연동 3rd Party', '3rd Party'],
+  ['우리가 공급사 OMH Supply', 'OMH Supply'],
+  ['상호연동 Two-way', 'Two-way'],
+];
+
+const tidy = (h) => (h === null || h === undefined ? '' : String(h).replace(/\s+/g, ' ').trim());
+
+/**
+ * The header row moved from 3 to 4 between versions, and the rows above it are titles
+ * and rollups of varying height. Find it by its first cell instead of counting: every
+ * version of this tracker starts the header with "No.".
+ */
+function headerRowOf(aoa) {
+  for (let i = 0; i < Math.min(aoa.length, 10); i += 1) {
+    const row = (aoa[i] ?? []).map(tidy);
+    if (row.includes('No.') && row.filter(Boolean).length >= 8) return i;
+  }
+  return HEADER_ROW - 1;
+}
+
+/**
+ * Read the category sheets into one grid.
+ *
+ * Switch vendors and Two-way carry three extra columns of their own, which shifts every
+ * shared column to the right. Rows are therefore re-laid against a canonical header list
+ * built from the names actually seen, so a column means the same thing on every row no
+ * matter which sheet it came from. A synthetic __category column carries the sheet.
+ */
+function readCategorySheets() {
+  const present = CATEGORY_SHEETS.filter(([sheet]) => workbook.SheetNames.includes(sheet));
+  if (!present.length) return null;
+
+  const canonical = [];
+  const indexOfName = (name) => {
+    let i = canonical.indexOf(name);
+    if (i < 0) { canonical.push(name); i = canonical.length - 1; }
+    return i;
+  };
+
+  const staged = [];
+  for (const [sheet, category] of present) {
+    const aoa = XLSX.utils.sheet_to_json(workbook.Sheets[sheet], { header: 1, raw: true, defval: null });
+    const hr = headerRowOf(aoa);
+    const names = (aoa[hr] ?? []).map(tidy);
+    const slots = names.map((n) => (n ? indexOfName(n) : -1));
+
+    for (let r = hr + 1; r < aoa.length; r += 1) {
+      const src = aoa[r] ?? [];
+      const out = [];
+      for (let c = 0; c < slots.length; c += 1) if (slots[c] >= 0) out[slots[c]] = src[c] ?? null;
+      staged.push({ out, category, sheet });
+    }
+  }
+
+  const catSlot = indexOfName('__category');
+  const rowsOut = staged.map(({ out, category }) => {
+    const row = new Array(canonical.length).fill(null);
+    for (let i = 0; i < out.length; i += 1) row[i] = out[i] ?? null;
+    row[catSlot] = category;
+    return row;
+  });
+
+  // Two blank rows then the header, so the data loop below starts where it always has.
+  return {
+    grid: [[], [], canonical, ...rowsOut],
+    headers: canonical,
+    label: present.map(([, c]) => c).join(' + '),
+  };
+}
+
+const multi = readCategorySheets();
+
+const legacySheet = multi ? null : SHEET_CANDIDATES.find((name) => workbook.SheetNames.includes(name));
+if (!multi && !legacySheet) {
+  console.error(`\nNo tracker sheets found. Looked for: ${CATEGORY_SHEETS.map(([s]) => s).join(', ')}`);
+  console.error(`  or the single-sheet layout: ${SHEET_CANDIDATES.join(', ')}`);
   console.error(`The workbook has: ${workbook.SheetNames.join(', ')}\n`);
   process.exit(1);
 }
 
-const grid = XLSX.utils.sheet_to_json(workbook.Sheets[SHEET], { header: 1, raw: true, defval: null });
-const headers = (grid[HEADER_ROW - 1] ?? []).map((h) => (h === null ? '' : String(h).replace(/\s+/g, ' ').trim()));
-const columnOf = (name) => headers.indexOf(String(name).replace(/\s+/g, ' ').trim());
+const SHEET = multi ? multi.label : legacySheet;
+const grid = multi
+  ? multi.grid
+  : XLSX.utils.sheet_to_json(workbook.Sheets[legacySheet], { header: 1, raw: true, defval: null });
+const headers = multi
+  ? multi.headers
+  : (grid[HEADER_ROW - 1] ?? []).map(tidy);
+const columnOf = (name) => headers.indexOf(tidy(name));
 
 const IDX = Object.fromEntries(
   Object.entries(COLUMNS).map(([key, names]) => {
@@ -426,6 +538,13 @@ for (let r = HEADER_ROW; r < grid.length; r += 1) {
     status,
     category: clean(at(raw, 'category')) ?? 'Uncategorised',
     country: clean(at(raw, 'country')),
+    region: clean(at(raw, 'region')),
+    salesStage: clean(at(raw, 'salesStage')),
+    flow: clean(at(raw, 'direction2')),
+    nextActionKr: clean(at(raw, 'nextActionKr')),
+    nextActionEn: clean(at(raw, 'nextActionEn')),
+    lastContact: toISODate(at(raw, 'lastContact')),
+    source: clean(at(raw, 'source')),
     impact: clean(at(raw, 'impact')),
     devOwner,
     direction: direction.key,

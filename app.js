@@ -189,10 +189,16 @@
     const owner =
       STAGE_OWNER[row.progress] ?? (route === 'direct' ? 'dev' : route === 'switching' ? 'switching' : 'partner');
 
+    // v3 carries a written next action on 115 of 142 rows, naming the person and the
+    // specific thing owed. That beats the stage default, which can only say what the
+    // process says happens at 45%. The default still covers the rows nobody has written.
+    const written = lang === 'ko' ? row.nextActionKr : row.nextActionEn;
+
     return {
       owner,
       route,
-      text: t(`act.p${row.progress}`),
+      text: written || t(`act.p${row.progress}`),
+      written: Boolean(written),
       caveat: row.progress >= 50 && route !== 'direct' ? t(`act.route.${route}`, { sw: row.switching ?? '' }) : null,
       // The one hard gate in the process: no live key without both conditions.
       gate: row.progress === 60 || row.progress === 70 ? t('act.gate') : null,

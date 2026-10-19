@@ -42,7 +42,10 @@ function discover() {
 
   const candidates = fs
     .readdirSync(dir)
-    .filter((name) => /dev_schedule.*\.xlsx$/i.test(name) && !name.startsWith('~$'))
+    // The workbook was renamed from "2026_Dev_Schedule__updated_*" to
+    // "API_Dev_Tracker_v3_*" on 19 Oct. Matching only the old name would have kept
+    // rebuilding from last month's file while the new one sat in the same folder.
+    .filter((name) => /(dev[_ ]?schedule|dev[_ ]?tracker).*\.xlsx$/i.test(name) && !name.startsWith('~$'))
     .map((name) => ({
       file: path.join(dir, name),
       latest: name.toLowerCase().startsWith('_latest_'),

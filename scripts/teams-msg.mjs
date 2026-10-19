@@ -94,7 +94,7 @@ const LEDGER = path.join(root, 'data', 'live-announced.json');
  * announced. The rule was that an announced partner does not come back, so the record of
  * having announced it outranks a later relabelling of the status column.
  */
-const isLive = (r) => r.status === 'Live' || r.progress >= 100 || Boolean(ledger[r.project]);
+const isLive = (r) => r.status === 'Live' || r.progress >= 100 || announced(r);
 
 function readLedger() {
   if (!fs.existsSync(LEDGER)) return {};
@@ -107,13 +107,23 @@ function readLedger() {
 }
 
 const ledger = readLedger();
+
+/**
+ * Ledger key. Two-way partners get one row per direction in v3 - TBO is Contact as a
+ * supply line and Live as a sourcing one - so keying on the name alone would retire
+ * both the moment either goes live. Older entries were written as a bare name, so those
+ * still count.
+ */
+const keyOf = (r) => (r.flow && r.category === 'Two-way' ? `${r.project} / ${r.flow}` : r.project);
+const announced = (r) => Boolean(ledger[keyOf(r)] ?? ledger[r.project]);
+
 const liveRows = data.rows.filter(isLive);
-const newlyLive = liveRows.filter((r) => !ledger[r.project]);
+const newlyLive = liveRows.filter((r) => !announced(r));
 
 /** Written only when the messages are actually produced, never on a dry inspection. */
 function recordAnnounced() {
   if (!newlyLive.length) return;
-  for (const r of newlyLive) ledger[r.project] = asOf;
+  for (const r of newlyLive) ledger[keyOf(r)] = asOf;
   const sorted = Object.fromEntries(Object.entries(ledger).sort(([a], [b]) => a.localeCompare(b)));
   fs.writeFileSync(LEDGER, `${JSON.stringify(sorted, null, 1)}\n`, 'utf8');
 }
@@ -139,6 +149,9 @@ const devWork = inFlight
     return rank[a.watch] - rank[b.watch] || b.progress - a.progress;
   });
 const partnerWait = inFlight.filter((r) => r.watch === 'partnerbuild');
+
+/** The written next action when someone has entered one, else null. */
+const writtenAction = (row, lang) => (lang === 'ko' ? row.nextActionKr : row.nextActionEn) || null;
 
 const stageOf = (row) => {
   const hit = row.stages.filter((s) => s.date).pop();
@@ -276,14 +289,18 @@ function salesMessage() {
 
 /** Sheet category -> business line. Anything unmapped still shows, under its own name. */
 const LINES = [
-  { key: 'Channel API', label: '고객사 연동' },
-  { key: '3rd Party Hotel', label: '공급사 연동' },
-  { key: 'Switching System', label: '스위칭 연동' },
-  { key: '3rd Party Activity', label: '액티비티 공급사' },
-  { key: 'CRS', label: 'CRS' },
+  { key: 'OMH Supply', label: '우리가 공급사' },
+  { key: 'Two-way', label: '상호연동' },
+  { key: 'Switching', label: '스위칭 연동' },
+  { key: 'Switch vendors', label: '스위칭 업체' },
+  { key: '3rd Party', label: '서드파티 연동' },
 ];
-/** Lines that bring inventory in, as opposed to selling it. */
-const SUPPLY = ['3rd Party Hotel', '3rd Party Activity', 'CRS'];
+/**
+ * Lines that bring inventory in rather than sell it. In v3 the direction is explicit:
+ * 3rd Party is OMH buying, OMH Supply is OMH selling, and Two-way is both, so it is
+ * counted on neither side.
+ */
+const SUPPLY = ['3rd Party'];
 
 function lineStats() {
   const seen = new Set(LINES.map((l) => l.key));
@@ -313,20 +330,6 @@ function lineStats() {
     })
     .filter((l) => l.n > 0)
     .sort((a, b) => b.n - a.n);
-}
-
-/** Partners that appear on more than one line - selling to us and buying from us. */
-function twoWay() {
-  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const m = new Map();
-  for (const r of data.rows) {
-    const k = norm(r.project);
-    if (!m.has(k)) m.set(k, []);
-    m.get(k).push(r);
-  }
-  return [...m.values()]
-    .filter((v) => v.length > 1 && new Set(v.map((r) => r.category)).size > 1)
-    .sort((a, b) => Math.max(...b.map((r) => r.progress)) - Math.max(...a.map((r) => r.progress)));
 }
 
 function leadersMessage() {
@@ -384,10 +387,6 @@ function leadersMessage() {
   const sOmh = supply.reduce((s, l) => s + l.omh, 0);
   if (sN && sOmh / sN >= 0.7) {
     b += `<div ${line}>&middot; <b>공급 라인 = OMH 직접 개발</b> ${sOmh}/${sN}건 (현재 가동 ${devWork.length}).</div>`;
-  }
-  const both = twoWay();
-  if (both.length) {
-    b += `<div ${line}>&middot; <b>양방향 상대</b> ${both.length}곳 — ${both.slice(0, 5).map((v) => esc(v[0].project)).join(' · ')}${both.length > 5 ? ' 외' : ''}.</div>`;
   }
 
   /* ---- 판단 필요 ---- */
