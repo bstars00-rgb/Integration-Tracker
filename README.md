@@ -328,6 +328,42 @@ node scripts/post-teams.js msg "Global Sales Team" "<파일>" --send   # 실제 
 
 주간보고 파이프라인에서는 `run-weekly.js` Step 6.6 이 생성과 발송을 함께 합니다.
 
+## 매일 15시 · 메일 연동
+
+```bash
+npm run daily            # 4단계 실행, 발송 없음
+npm run daily -- --send  # 다이제스트까지 발송
+npm run mail             # 메일 스캔만
+```
+
+윈도우 작업 스케줄러에 `OMH Integration Tracker Daily` 로 등록돼 있습니다.
+
+1. SharePoint 최신본 받기
+2. 보드 재빌드·배포 (메일 데이터 없이)
+3. 메일함 스캔
+4. 메일 반영 빌드 + 다이제스트 작성 (로컬 전용)
+
+2번과 4번이 나뉘어 있습니다. **이 저장소는 공개라** `tracker.json` 에 메일 활동이
+들어가면 "Agoda에 10일째 회신 못 받는 중"이 웹에 올라갑니다. 공개 빌드에는 넣지 않고,
+`--with-mail` 을 줄 때만 합칩니다. `data/mail-activity.json` 도 gitignore 입니다.
+
+### 파트너 매칭
+
+`data/partner-domains.json` 에 적힌 도메인만 집계합니다. 이름으로 추측하게 두었더니
+`e.read.ai` 가 Zentrumhub 로, `trip.com` 이 Tripjack 으로 들어갔습니다. 잘못 붙는 것은
+빠뜨리는 것보다 나쁩니다. 답장이 왔다고 알려주는데 사실이 아니게 되니까요.
+
+분류 안 된 도메인은 `data/mail-unmapped.json` 과 다이제스트 하단에 나옵니다.
+`map` 에 넣으면 집계되고 `ignore` 에 넣으면 조용해집니다.
+
+개인 메일(gmail 등)은 도메인으로 가릴 수 없어서 `addresses` 에 주소 단위로 넣습니다.
+
+### 메일에서 읽는 것
+
+보낸 날·받은 날·건수·회신 대기 여부까지만 씁니다. 제목도 본문도 주소도 이름도
+가져오지 않습니다. 단계나 진행률은 자동으로 바꾸지 않습니다. "다음 주에 테스트
+시작합시다" 가 마일스톤 이동인지는 사람이 판단할 일입니다.
+
 ## 1회성 공지
 
 ```bash
