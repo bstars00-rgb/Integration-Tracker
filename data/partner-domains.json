@@ -1,0 +1,52 @@
+{
+  "_comment": "Which email domain belongs to which tracker partner. Guessing is deliberately avoided: a wrong guess files activity against the wrong partner, and 'e.read.ai' matched Zentrumhub when the matcher was allowed to guess. Only what is listed here counts. Unmapped domains are reported by mail-scan so they can be added or ignored.",
+  "map": {
+    "accomy.com": "Accomy",
+    "agoda.com": "Agoda",
+    "apacmail.webbeds.com": "Webbeds",
+    "emergingtravel.com": "RateHawk",
+    "giftronaut.com": "Giftronaut",
+    "go-mmt.com": "MakeMyTrip",
+    "luxury.com.sg": "Luxury Tours",
+    "myrealtrip.com": "Myrealtrip API",
+    "nuitee.com": "Nuitée",
+    "qunar.com": "Qunar",
+    "ratehawk.com": "RateHawk",
+    "stay-lah.com": "Staylah",
+    "tidesquare.com": "Tidesquare",
+    "tiket.com": "Tiket.com",
+    "traveloka.com": "Traveloka",
+    "veturis.com": "Veturis",
+    "webbeds.com": "Webbeds",
+    "zentrumhub.com": "Zentrumhub"
+  },
+  "_comment_review": "Seen in the mailbox and believed to belong to a partner, but the company name and the domain differ enough that a person should confirm before it counts. Move into map once checked.",
+  "review": {
+    "ehotelxml.com": "?",
+    "gmail.com": "개인 메일 — addresses 에 주소 단위로 등록 필요",
+    "j-ywc.com": "?",
+    "jusregal.com": "?",
+    "mgbedbank.com": "MG Group (Room Deal)?",
+    "mnservice.co.kr": "?",
+    "postumtravel.vn": "?",
+    "rakuten.com": "RTX (Rakuten)?",
+    "sanhait.co.kr": "?",
+    "trip.com": "Ctrip Korea or Trip.com?"
+  },
+  "_comment_ignore": "Newsletters, events, tooling and internal mail. Counted as noise so the unmapped report stays short enough to act on.",
+  "ignore": [
+    "ohmyhotel.com",
+    "ohmylab.onmicrosoft.com",
+    "teams.mail.microsoft",
+    "microsoft.com",
+    "jublia.co",
+    "traveldailymedia.com",
+    "mailer.ttgasia.com",
+    "email.fairfestevents.com",
+    "e.read.ai",
+    "insureconnect.sg",
+    "hanafn.com"
+  ],
+  "_comment_addresses": "Partners who write from a personal address. Domain alone cannot place these, so they are matched on the full address.",
+  "addresses": {}
+}

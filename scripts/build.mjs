@@ -586,6 +586,30 @@ for (let r = HEADER_ROW; r < grid.length; r += 1) {
   rows.push(draft);
 }
 
+/**
+ * Email activity, when scripts/mail-scan.mjs has run.
+ *
+ * Optional on purpose: the board still builds on a machine with no mailbox access, and
+ * the file is gitignored because this repo is public.
+ */
+const mailPath = path.join(root, 'data', 'mail-activity.json');
+let mail = null;
+// Off unless asked for. tracker.json is committed to a public repo, and "we have been
+// chasing Agoda for ten days" is not something to publish to the web. The Teams
+// messages run with --with-mail; the published build does not.
+if (process.argv.includes('--with-mail') && fs.existsSync(mailPath)) {
+  try {
+    mail = JSON.parse(fs.readFileSync(mailPath, 'utf8'));
+    for (const row of rows) {
+      const m = mail.partners?.[row.project];
+      if (m) row.mail = m;
+    }
+  } catch {
+    console.warn('  mail-activity.json unreadable; building without email activity.');
+    mail = null;
+  }
+}
+
 const stats = (key) =>
   rows.reduce((acc, row) => {
     const value = row[key] ?? '—';
@@ -613,6 +637,9 @@ const payload = {
     hasTarget: IDX.targetGoLive >= 0,
     hasBlocker: IDX.blocker >= 0,
     hasChase: IDX.chaseCount >= 0,
+    mailScannedAt: mail?.generatedAt ?? null,
+    withMail: rows.filter((r) => r.mail).length,
+    awaitingReply: rows.filter((r) => r.mail?.waitingReply).length,
     withChase: rows.filter((r) => r.chaseCount).length,
     hasParkedFlag: IDX.parkedFlag >= 0,
     hasDevOwner: IDX.devOwner >= 0,
