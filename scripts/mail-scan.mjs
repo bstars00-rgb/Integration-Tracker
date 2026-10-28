@@ -95,13 +95,32 @@ async function pageThrough(url, H, onItem, cap = 20) {
 const activity = new Map();
 const unmapped = new Map();
 
-function note(partner, dir, iso) {
-  const v = activity.get(partner) || { lastIn: null, lastOut: null, in: 0, out: 0 };
+/**
+ * Who we were writing to, or who wrote. The Chase Log asks for this and it is a fact
+ * the mailbox holds, so it is carried through - unlike the stage or the gist of the
+ * thread, which are judgements. Kept against the latest message in each direction.
+ */
+function note(partner, dir, iso, who) {
+  const v = activity.get(partner)
+    || { lastIn: null, lastOut: null, in: 0, out: 0, lastInWho: null, lastOutWho: null };
   const day = iso.slice(0, 10);
-  if (dir === 'in') { v.in += 1; if (!v.lastIn || day > v.lastIn) v.lastIn = day; }
-  else { v.out += 1; if (!v.lastOut || day > v.lastOut) v.lastOut = day; }
+  if (dir === 'in') {
+    v.in += 1;
+    if (!v.lastIn || day >= v.lastIn) { v.lastIn = day; if (who) v.lastInWho = who; }
+  } else {
+    v.out += 1;
+    if (!v.lastOut || day >= v.lastOut) { v.lastOut = day; if (who) v.lastOutWho = who; }
+  }
   activity.set(partner, v);
 }
+
+/** "Qi Li <qi.li@klook.com>" -> "Qi Li". Falls back to the address when unnamed. */
+const personOf = (entry) => {
+  const name = String(entry?.name || '').trim();
+  const addr = String(entry?.address || '').trim();
+  if (name && name.toLowerCase() !== addr.toLowerCase()) return name;
+  return addr.split('@')[0] || addr;
+};
 
 const run = async () => {
   const accessToken = await token();
@@ -121,21 +140,23 @@ const run = async () => {
     await pageThrough(url, H, (m) => {
       const when = m[stampField] || m.receivedDateTime || m.sentDateTime;
       if (!when) return;
-      const addrs = dir === 'in'
-        ? [m.from?.emailAddress?.address]
-        : [...(m.toRecipients || []), ...(m.ccRecipients || [])].map((t) => t.emailAddress?.address);
+      const people = dir === 'in'
+        ? [m.from?.emailAddress]
+        : [...(m.toRecipients || []), ...(m.ccRecipients || [])].map((t) => t.emailAddress);
 
-      const hit = new Set();
-      for (const a of addrs.filter(Boolean)) {
-        const d = domainOf(a);
+      // One partner can appear on several addresses in a thread; the first external
+      // one that resolves names the counterpart for that message.
+      const hit = new Map();
+      for (const entry of people.filter((e) => e?.address)) {
+        const d = domainOf(entry.address);
         if (!d || isIgnored(d)) continue;
-        const partner = partnerFor(a);
-        if (partner) { hit.add(partner); continue; }
+        const partner = partnerFor(entry.address);
+        if (partner) { if (!hit.has(partner)) hit.set(partner, personOf(entry)); continue; }
         const v = unmapped.get(d) || { seen: 0, review: REVIEW.has(d) };
         v.seen += 1;
         unmapped.set(d, v);
       }
-      for (const p of hit) note(p, dir, when);
+      for (const [p, who] of hit) note(p, dir, when, who);
     });
   }
 
@@ -154,6 +175,10 @@ const run = async () => {
       outCount: v.out,
       waitingReply: waiting,
       waitingDays: waiting ? daysBetween(v.lastOut) : null,
+      // Who we wrote to, and who last wrote back. Local file only - this never reaches
+      // the published board.
+      lastOutWho: v.lastOutWho,
+      lastInWho: v.lastInWho,
     };
   }
 

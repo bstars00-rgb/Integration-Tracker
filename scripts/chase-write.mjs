@@ -116,6 +116,9 @@ const run = async () => {
       category: info.category,
       chaseDate: m.lastOut,
       responded: m.waitingReply ? 'N' : 'Y',
+      // The person on the other end of the chase, from the mailbox. A reply names the
+      // sender; otherwise it is whoever we wrote to.
+      counterpart: m.lastInWho || m.lastOutWho || '',
       nextChase: m.waitingReply ? addDays(m.lastOut, DAYS_TO_NEXT_CHASE) : '',
       owner: info.owner,
       stage: info.stage,
@@ -134,7 +137,7 @@ const run = async () => {
   const startRow = rows.length + 1;
   const values = pending.map((p, i) => [
     lastNo + i + 1, p.project, p.category, p.stage, toSerial(p.chaseDate), 'Email',
-    '', '메일 활동 자동 기록 (auto from mailbox)', p.responded, toSerial(p.nextChase), p.owner,
+    p.counterpart, '메일 활동 자동 기록 (auto from mailbox)', p.responded, toSerial(p.nextChase), p.owner,
   ]);
   const address = `A${startRow}:K${startRow + values.length - 1}`;
 
