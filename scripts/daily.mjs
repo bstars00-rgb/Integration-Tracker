@@ -51,6 +51,13 @@ attempt('4. 메일 반영 빌드 (로컬 전용)', () => {
   writeDigest();
 });
 
+attempt('5. Chase Log 기록', () => {
+  // Rows already in the sheet are matched on project and date, so a second run on the
+  // same day writes nothing. A workbook someone has open comes back 423 and is skipped
+  // until tomorrow rather than retried.
+  run('node', ['scripts/chase-write.mjs', '--write'], root);
+});
+
 /* ------------------------------------------------------------------ digest */
 function writeDigest() {
   const tracker = JSON.parse(fs.readFileSync(path.join(root, 'data', 'tracker.json'), 'utf8'));

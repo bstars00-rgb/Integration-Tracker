@@ -11,7 +11,8 @@
     "teams": "node scripts/teams-msg.mjs",
     "announce": "node scripts/announce.mjs",
     "mail": "node scripts/mail-scan.mjs",
-    "daily": "node scripts/daily.mjs"
+    "daily": "node scripts/daily.mjs",
+    "chase": "node scripts/chase-write.mjs"
   },
   "devDependencies": {
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

@@ -91,6 +91,9 @@ const STAGE_SETS = {
 const COLUMNS = {
   no: ['No.'],
   category: ['__category', 'Category', '원본 카테고리 Category (orig.)'],
+  // The v2 category the sheet still carries alongside the v3 split. Chase Log rows are
+  // filed under this one, so writing there needs it kept separately.
+  categoryOrig: ['원본 카테고리 Category (orig.)'],
   project: ['프로젝트 (업체) Project (Partner)', 'Project'],
   country: ['국가 Country', 'Country'],
   region: ['지역 Region'],
@@ -537,6 +540,7 @@ for (let r = HEADER_ROW; r < grid.length; r += 1) {
     project,
     status,
     category: clean(at(raw, 'category')) ?? 'Uncategorised',
+    categoryOrig: clean(at(raw, 'categoryOrig')),
     country: clean(at(raw, 'country')),
     region: clean(at(raw, 'region')),
     salesStage: clean(at(raw, 'salesStage')),
