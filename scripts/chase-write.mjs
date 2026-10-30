@@ -106,23 +106,33 @@ const run = async () => {
     if (Number.isFinite(n)) lastNo = Math.max(lastNo, n);
   }
 
+  // A row per day a chase went out, not per partner. Keeping only the latest outbound
+  // meant a partner chased six times in a month contributed one line, and the log read
+  // as far quieter than the mailbox actually was.
   const pending = [];
   for (const [project, m] of Object.entries(mail.partners || {})) {
-    if (!m.lastOut) continue;
-    if (logged.has(`${project}::${m.lastOut}`)) continue;
     const info = meta.get(project) || { category: '', owner: '', stage: '' };
-    pending.push({
-      project,
-      category: info.category,
-      chaseDate: m.lastOut,
-      responded: m.waitingReply ? 'N' : 'Y',
-      // The person on the other end of the chase, from the mailbox. A reply names the
-      // sender; otherwise it is whoever we wrote to.
-      counterpart: m.lastInWho || m.lastOutWho || '',
-      nextChase: m.waitingReply ? addDays(m.lastOut, DAYS_TO_NEXT_CHASE) : '',
-      owner: info.owner,
-      stage: info.stage,
-    });
+    const days = m.days?.length ? m.days : (m.lastOut ? [{ date: m.lastOut, out: 1, in: 0, who: m.lastOutWho }] : []);
+
+    for (const d of days) {
+      if (!d.out) continue;                       // inbound-only days are not a chase
+      if (logged.has(`${project}::${d.date}`)) continue;
+
+      // Replied if anything came back from them on that day or later.
+      const replied = (m.days || []).some((x) => x.in > 0 && x.date >= d.date);
+      pending.push({
+        project,
+        category: info.category,
+        chaseDate: d.date,
+        responded: replied ? 'Y' : 'N',
+        // The person on the other end. A reply names the sender; otherwise it is
+        // whoever we wrote to that day.
+        counterpart: d.who || m.lastInWho || m.lastOutWho || '',
+        nextChase: replied ? '' : addDays(d.date, DAYS_TO_NEXT_CHASE),
+        owner: info.owner,
+        stage: info.stage,
+      });
+    }
   }
   pending.sort((a, b) => a.chaseDate.localeCompare(b.chaseDate) || a.project.localeCompare(b.project));
 

@@ -102,7 +102,7 @@ const unmapped = new Map();
  */
 function note(partner, dir, iso, who) {
   const v = activity.get(partner)
-    || { lastIn: null, lastOut: null, in: 0, out: 0, lastInWho: null, lastOutWho: null };
+    || { lastIn: null, lastOut: null, in: 0, out: 0, lastInWho: null, lastOutWho: null, days: new Map() };
   const day = iso.slice(0, 10);
   if (dir === 'in') {
     v.in += 1;
@@ -111,6 +111,14 @@ function note(partner, dir, iso, who) {
     v.out += 1;
     if (!v.lastOut || day >= v.lastOut) { v.lastOut = day; if (who) v.lastOutWho = who; }
   }
+  // Every day with traffic, not just the latest. Keeping only the last outbound meant
+  // the Chase Log got one row per partner however many times they were chased, and a
+  // day the job did not run was lost for good.
+  const d = v.days.get(day) || { in: 0, out: 0, who: null };
+  d[dir] += 1;
+  if (dir === 'out' && who && !d.who) d.who = who;
+  if (dir === 'in' && who) d.who = who;
+  v.days.set(day, d);
   activity.set(partner, v);
 }
 
@@ -179,6 +187,11 @@ const run = async () => {
       // the published board.
       lastOutWho: v.lastOutWho,
       lastInWho: v.lastInWho,
+      // One entry per day with traffic, so the Chase Log can carry a row per chase
+      // rather than a row per partner.
+      days: [...v.days.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, c]) => ({ date, in: c.in, out: c.out, who: c.who })),
     };
   }
 
