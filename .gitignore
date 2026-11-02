@@ -8,3 +8,5 @@ node_modules
 output/
 data/mail-activity.json
 data/mail-unmapped.json
+data/daily-state.json
+output/
