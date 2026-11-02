@@ -190,4 +190,14 @@ if (send) {
 // The board is left as the public build so a later manual publish cannot leak email data.
 try { run('node', ['scripts/build.mjs'], root); } catch { /* best effort */ }
 
-console.log(`\n${failed ? `완료 (실패 ${failed}단계)` : '완료'}\n`);
+// Recorded only on a clean run, so a failed day is covered again by the next run
+// rather than skipped.
+if (!failed()) {
+  fs.writeFileSync(STATE, `${JSON.stringify({ lastRun: today }, null, 1)}\n`, 'utf8');
+  console.log('\n완료\n');
+} else {
+  console.error(`\n완료 (실패 ${failed()}단계: ${failures.join(', ')})`);
+  console.error(`로그: ${path.relative(root, logFile)}\n`);
+  // Non-zero so Task Scheduler stops reporting a silent failure as success.
+  process.exitCode = 1;
+}
