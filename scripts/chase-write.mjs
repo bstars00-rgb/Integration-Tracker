@@ -34,10 +34,7 @@ const COLS = ['No.', 'Project', 'Category', 'Stage', 'Chase date', 'Method', 'Co
 const DAYS_TO_NEXT_CHASE = 7;
 
 /* ------------------------------------------------------------------ auth */
-const cachePlugin = {
-  beforeCacheAccess: async (c) => { if (fs.existsSync(CACHE)) c.tokenCache.deserialize(fs.readFileSync(CACHE, 'utf8')); },
-  afterCacheAccess: async (c) => { if (c.cacheHasChanged) fs.writeFileSync(CACHE, c.tokenCache.serialize()); },
-};
+const cachePlugin = require(path.join(REPORT, 'scripts/auto/msal-cache-plugin.js')).createCachePlugin(CACHE);
 const pca = new PublicClientApplication({
   auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}` },
   cache: { cachePlugin },

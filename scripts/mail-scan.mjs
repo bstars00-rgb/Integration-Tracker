@@ -31,10 +31,7 @@ const argv = process.argv.slice(2);
 const DAYS = Number(argv[argv.indexOf('--days') + 1]) || 30;
 
 /* ------------------------------------------------------------------ auth */
-const cachePlugin = {
-  beforeCacheAccess: async (c) => { if (fs.existsSync(CACHE)) c.tokenCache.deserialize(fs.readFileSync(CACHE, 'utf8')); },
-  afterCacheAccess: async (c) => { if (c.cacheHasChanged) fs.writeFileSync(CACHE, c.tokenCache.serialize()); },
-};
+const cachePlugin = require(path.join(REPORT, 'scripts/auto/msal-cache-plugin.js')).createCachePlugin(CACHE);
 const pca = new PublicClientApplication({
   auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}` },
   cache: { cachePlugin },
