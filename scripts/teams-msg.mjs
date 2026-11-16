@@ -132,7 +132,16 @@ function recordAnnounced() {
  * The weekly working set. A live partner drops out even at 80%, because the team asked
  * not to see it again after the go-live is announced.
  */
-const inFlight = data.rows.filter((r) => r.progress > 0 && r.progress < 100 && !isLive(r));
+/**
+ * In flight means someone is still working it. Hold/Drop is the sheet saying nobody is,
+ * so those rows leave the working set the same way live ones do - otherwise the alert
+ * kept reporting Uone as 433 days stalled weeks after it was parked, which is the
+ * opposite of what parking it meant.
+ */
+const inFlight = data.rows.filter(
+  (r) => r.progress > 0 && r.progress < 100 && !isLive(r) && !r.parked,
+);
+const parkedRows = data.rows.filter((r) => r.parked);
 
 // route and watch are computed in build.mjs and shipped on the row, so these messages
 // and the board cannot disagree about who owns what.
@@ -229,7 +238,7 @@ function devMessage() {
     b += `<div ${line}>&#9203; Waiting on partners: <b>${partnerWait.length}</b> (${fresh} moved &lt;30d).</div>`;
   }
 
-  b += foot(`In-flight ${inFlight.length} · stalled = no milestone ${STALE_DAYS}d+`);
+  b += foot(`In-flight ${inFlight.length} · stalled = no milestone ${STALE_DAYS}d+` + (parkedRows.length ? ` · ${parkedRows.length} on hold or dropped, excluded` : ''));
   return wrap(b);
 }
 
@@ -270,7 +279,7 @@ function salesMessage() {
     b += `<div ${line}>${nda.map((r) => esc(r.project)).join(' · ')} &rarr; 살아있는지 확인, 아니면 <b>Hold/Drop</b></div>`;
   }
 
-  b += foot(`진행중 ${inFlight.length}건 집계 · 매주 자동 생성`);
+  b += foot(`진행중 ${inFlight.length}건 집계 · 매주 자동 생성` + (parkedRows.length ? ` · 보류·드롭 ${parkedRows.length}건 제외` : ''));
   return wrap(b);
 }
 
@@ -398,7 +407,7 @@ function leadersMessage() {
   }
 
   const noImpact = data.rows.length - (data.counts?.withImpact ?? 0);
-  b += foot(`정체 기준 ${STALE_DAYS}일+ · 라인=시트 Category · 매주 자동${noImpact ? ` · Biz Impact 미입력 ${noImpact}/${data.rows.length}` : ''}`);
+  b += foot(`정체 기준 ${STALE_DAYS}일+ · 라인=시트 Category · 매주 자동` + (parkedRows.length ? ` · 보류·드롭 ${parkedRows.length}건 제외` : '') + (noImpact ? ` · Biz Impact 미입력 ${noImpact}/${data.rows.length}` : ''));
   return wrap(b);
 }
 

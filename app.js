@@ -845,6 +845,9 @@
       ['stalled30', t('health.stalled30')],
       ['watch', t('health.watch')],
       ['live', t('health.live')],
+      // Parked rows are their own health, so without this there was no way to see them
+      // or to confirm something had actually been put on hold.
+      ['parked', t('health.parked')],
     ]);
   }
 
