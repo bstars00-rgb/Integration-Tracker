@@ -102,6 +102,7 @@
     state.tab = tab;
     $('view-dashboard').hidden = tab !== 'dashboard';
     $('view-list').hidden = tab !== 'list';
+    $('view-contracts').hidden = tab !== 'contracts';
     for (const button of $('tabs').children) {
       button.setAttribute('aria-selected', button.dataset.tab === tab ? 'true' : 'false');
     }
@@ -1170,6 +1171,7 @@
     syncControls();
     renderDashboard();
     renderList();
+    renderContracts();
   }
 
   document.querySelector('.lang').addEventListener('click', (event) => {
@@ -1275,7 +1277,234 @@
     }
   });
 
+
+  /* ================================================================ contracts */
+  /**
+   * The Contracts tab. Its data file is gitignored, so on the public site
+   * window.CONTRACTS is undefined and the tab explains how to build it.
+   *
+   * Values read by OCR are marked as estimates and carry their source quote in a
+   * tooltip. A commission rate or an expiry date lifted off a scan is a claim, and
+   * showing it as a plain fact is how a wrong number ends up in a negotiation.
+   */
+  const CT = window.CONTRACTS;
+  const CT_ORDER = ['expired', 'expiring', 'missing', 'renewed', 'unknown', 'active', 'lead', 'parked'];
+  /** Reuses the dashboard's card tones rather than inventing new ones. */
+  const CT_TONE = { expired: 'alert', expiring: 'alert', missing: 'alert', renewed: 'good', active: 'good', unknown: '', lead: '', parked: '' };
+  const ctState = { q: '', state: '', bucket: '', pic: '', sort: '', dir: 'asc' };
+
+  const ctRows = () => (CT && Array.isArray(CT.rows) ? CT.rows : []);
+
+  function ctUnique(key) {
+    return [...new Set(ctRows().map((r) => r[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }
+
+  function ctVisible() {
+    const q = ctState.q.trim().toLowerCase();
+    let rows = ctRows().filter((r) => {
+      if (ctState.state && r.state !== ctState.state) return false;
+      if (ctState.bucket && r.bucket !== ctState.bucket) return false;
+      if (ctState.pic && r.pic !== ctState.pic) return false;
+      if (!q) return true;
+      return [r.company, r.project, r.note, r.latestDoc, r.pic].some((v) =>
+        String(v ?? '').toLowerCase().includes(q));
+    });
+    if (ctState.sort) {
+      const dir = ctState.dir === 'desc' ? -1 : 1;
+      rows = [...rows].sort((a, b) => {
+        let x = a[ctState.sort];
+        let y = b[ctState.sort];
+        if (ctState.sort === 'state') {
+          x = CT_ORDER.indexOf(a.state);
+          y = CT_ORDER.indexOf(b.state);
+        }
+        // Blanks last whichever way the column is sorted; an empty end date is not
+        // "earliest", it is unknown.
+        const ex = x === '' || x === null || x === undefined;
+        const ey = y === '' || y === null || y === undefined;
+        if (ex !== ey) return ex ? 1 : -1;
+        if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+        return String(x).localeCompare(String(y)) * dir;
+      });
+    }
+    return rows;
+  }
+
+  /** An OCR-derived value, labelled, with the quote it came from. */
+  function ctGuess(value, ev) {
+    if (!value) return '&mdash;';
+    if (!ev) return escape(value);
+    const quote = String(ev.quote ?? '').slice(0, 300);
+    const where = ev.page ? ` (p${ev.page}${ev.engine ? `/${ev.engine}` : ''})` : '';
+    return `${escape(value)} <abbr class="guess" title="${escape(t('ct.guess.title', { quote }) + where)}">${escape(t('ct.guess'))}</abbr>`;
+  }
+
+  function ctRowHtml(r) {
+    const flags = [];
+    if (r.disagree) flags.push(`<span class="flag bad" title="${escape(t('ct.disagree'))}">!</span>`);
+    if (r.unreadable) flags.push(`<span class="flag" title="${escape(t('ct.unreadable'))}">?</span>`);
+
+    const company = r.latestDocUrl
+      ? `<a href="${escape(r.latestDocUrl)}" target="_blank" rel="noopener">${escape(r.company)}</a>`
+      : escape(r.company);
+
+    const renewal =
+      r.renewal === 'auto' ? t('ct.renewal.auto')
+      : r.renewal === 'none' ? t('ct.renewal.none')
+      : '';
+
+    const left =
+      r.daysToEnd === null ? '&mdash;'
+      : r.daysToEnd < 0 ? `<span class="neg">${r.daysToEnd}d</span>`
+      : `${r.daysToEnd}d`;
+
+    // A rate is shown only when a person confirmed it. OCR reads the clause but
+    // not the number: measured against these contracts it returned late-payment
+    // penalties and tier-table row counts, so the tab points at the clause instead.
+    const commission = r.commission
+      ? escape(`${r.commission}%`)
+      : r.evidence && r.evidence.commission
+        ? `<abbr class="guess" title="${escape(t('ct.commission.title', { quote: String(r.evidence.commission.quote || '').slice(0, 300) }))}">${escape(t('ct.commission.clause'))}</abbr>`
+        : '&mdash;';
+
+    const docs = r.docCount
+      ? `<span title="${escape(t('ct.docs.title', { n: r.docCount, list: (r.docTypes || []).join(', ') }))}">${r.docCount}</span>`
+      : '0';
+
+    return `<tr class="ct-${escape(r.state)}">
+      <td>${company} ${flags.join('')}</td>
+      <td>${r.project ? escape(r.project) : '&mdash;'}</td>
+      <td><span class="chip ct-${escape(r.state)}">${escape(t(`ct.state.${r.state}`))}</span></td>
+      <td>${r.start ? ctGuess(fmtDate(r.start), r.evidence && r.evidence.period) : '&mdash;'}</td>
+      <td>${r.end ? ctGuess(fmtDate(r.end), r.evidence && r.evidence.period) : '&mdash;'}</td>
+      <td class="num">${left}</td>
+      <td>${renewal ? ctGuess(renewal, r.evidence && r.evidence.renewal) : '&mdash;'}</td>
+      <td>${commission}</td>
+      <td class="num">${docs}</td>
+      <td class="c-next">${escape(r.note || '')}</td>
+      <td>${escape(r.pic || '')}</td>
+    </tr>`;
+  }
+
+  function ctRenderCards() {
+    const counts = CT.counts || {};
+    $('ct-cards').innerHTML = CT_ORDER.filter((s) => counts[s])
+      .map((s) => {
+        const label = s === 'expiring'
+          ? t('ct.card.expiring', { n: CT.expiringDays })
+          : t(`ct.card.${s}`);
+        return `<button type="button" class="kpi ${CT_TONE[s] || ''}" data-ctcard="${s}" aria-pressed="${ctState.state === s}">
+          <span class="kpi-label">${escape(label)}</span>
+          <span class="kpi-row"><span class="kpi-value">${counts[s]}</span></span>
+        </button>`;
+      })
+      .join('');
+  }
+
+  function ctBuildSelects() {
+    const fill = (id, first, values) => {
+      const select = $(id);
+      const current = select.value;
+      select.innerHTML =
+        `<option value="">${escape(first)}</option>` +
+        values.map(([v, label]) => `<option value="${escape(v)}">${escape(label)}</option>`).join('');
+      select.value = current;
+    };
+    fill('ct-state', t('ct.all.state'),
+      CT_ORDER.filter((s) => (CT.counts || {})[s]).map((s) => [s, t(`ct.state.${s}`)]));
+    fill('ct-bucket', t('ct.all.bucket'), ctUnique('bucket').map((v) => [v, v]));
+    fill('ct-pic', t('ct.all.pic'), ctUnique('pic').map((v) => [v, v]));
+    for (const id of ['ct-state', 'ct-bucket', 'ct-pic']) {
+      $(id).dataset.empty = $(id).value === '' ? 'true' : 'false';
+    }
+  }
+
+  function renderContracts() {
+    if (!CT || !Array.isArray(CT.rows)) {
+      $('ct-missing-data').hidden = false;
+      $('ct-body').hidden = true;
+      return;
+    }
+    $('ct-missing-data').hidden = true;
+    $('ct-body').hidden = false;
+
+    ctRenderCards();
+    ctBuildSelects();
+    $('ct-search').placeholder = t('search.placeholder');
+    $('ct-search').value = ctState.q;
+
+    const rows = ctVisible();
+    $('ct-tbody').innerHTML = rows.map(ctRowHtml).join('');
+    $('ct-empty').hidden = rows.length > 0;
+
+    const cos = new Set(ctRows().filter((r) => r.hasContract).map((r) => r.company)).size;
+    const meta = t('ct.meta', { files: CT.fileCount ?? 0, cos, when: CT.today ?? '' });
+    const trust = CT.curatedCount
+      ? t('ct.curated', { sheet: CT.curatedSheet, n: CT.curatedCount })
+      : t('ct.uncurated');
+    $('ct-resultline').textContent = `${t('ct.result', { n: rows.length })} · ${meta} · ${trust}`;
+
+    for (const th of document.querySelectorAll('th[data-ctsort]')) {
+      if (th.dataset.ctsort === ctState.sort) th.dataset.dir = ctState.dir;
+      else delete th.dataset.dir;
+    }
+  }
+
+  $('ct-search').addEventListener('input', (event) => {
+    ctState.q = event.target.value;
+    renderContracts();
+  });
+  for (const pair of [['ct-state', 'state'], ['ct-bucket', 'bucket'], ['ct-pic', 'pic']]) {
+    $(pair[0]).addEventListener('change', (event) => {
+      ctState[pair[1]] = event.target.value;
+      renderContracts();
+    });
+  }
+  $('ct-cards').addEventListener('click', (event) => {
+    const card = event.target.closest('[data-ctcard]');
+    if (!card) return;
+    ctState.state = ctState.state === card.dataset.ctcard ? '' : card.dataset.ctcard;
+    renderContracts();
+  });
+  $('ct-table').addEventListener('click', (event) => {
+    const th = event.target.closest('th[data-ctsort]');
+    if (!th) return;
+    const key = th.dataset.ctsort;
+    if (ctState.sort === key) ctState.dir = ctState.dir === 'asc' ? 'desc' : 'asc';
+    else {
+      ctState.sort = key;
+      ctState.dir = 'asc';
+    }
+    renderContracts();
+  });
+  $('ct-reset').addEventListener('click', () => {
+    Object.assign(ctState, { q: '', state: '', bucket: '', pic: '', sort: '', dir: 'asc' });
+    renderContracts();
+  });
+  $('ct-export').addEventListener('click', () => {
+    const cell = (value) => {
+      const text = String(value ?? '');
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const header = ['업체', '연동건', '상태', '계약시점', '계약종료시점', '남은일', '자동갱신',
+      '수수료', '문서수', '문서종류', '특이사항', '담당', '확인됨', '최신문서', '링크'];
+    const lines = ctVisible().map((r) =>
+      [r.company, r.project, t(`ct.state.${r.state}`), r.start, r.end, r.daysToEnd ?? '',
+       r.renewal, r.commission, r.docCount, (r.docTypes || []).join(' '), r.note, r.pic,
+       r.curated ? 'Y' : '', r.latestDoc, r.latestDocUrl].map(cell).join(','),
+    );
+    // BOM so Excel opens the UTF-8 company names correctly.
+    const blob = new Blob(['﻿' + [header.join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `contracts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
   /* ================================================================ boot */
   applyLanguage();
-  showTab(location.hash.slice(1) === 'list' ? 'list' : 'dashboard');
+  const startTab = location.hash.slice(1);
+  showTab(['list', 'contracts'].includes(startTab) ? startTab : 'dashboard');
 })();

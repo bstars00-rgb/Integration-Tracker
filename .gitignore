@@ -10,3 +10,8 @@ data/mail-activity.json
 data/mail-unmapped.json
 data/daily-state.json
 output/
+
+# Contract tracking. The repo is public; contract dates, rates and notes are not
+# for a public Pages site. The Contracts tab reads these when opened locally.
+data/contracts.json
+data/contracts.js
